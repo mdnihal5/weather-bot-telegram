@@ -7,4 +7,5 @@ module.exports = {
   MONGODB_URI:
     process.env.MONGODB_URI || "mongodb://localhost:27017/weather-bot",
   UPDATE_INTERVAL: process.env.UPDATE_INTERVAL || "12", // hours
+  WEB_HOOK_URL: process.env.WEB_HOOK_URL,
 };

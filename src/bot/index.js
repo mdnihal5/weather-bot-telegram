@@ -1,11 +1,13 @@
 const TelegramBot = require("node-telegram-bot-api");
+const express = require("express");
 const config = require("../config/config");
 const Database = require("../services/database");
 const WeatherService = require("../services/weatherService");
 
 class WeatherBot {
   constructor() {
-    this.bot = new TelegramBot(config.TELEGRAM_BOT_TOKEN, { polling: true });
+    this.bot = new TelegramBot(config.TELEGRAM_BOT_TOKEN);
+    this.app = express();
     this.initializeBot();
   }
 
@@ -15,24 +17,34 @@ class WeatherBot {
       this.initializeCommands();
       this.startSubscriptionUpdates();
       console.log("Bot is running...");
+      const webhookUrl = `${config.WEB_HOOK_URL}/bot${config.TELEGRAM_BOT_TOKEN}`;
+      await this.bot.setWebHook(webhookUrl);
+
+      this.app.use(express.json());
+      this.app.post(`/bot${config.TELEGRAM_BOT_TOKEN}`, (req, res) => {
+        this.bot.processUpdate(req.body);
+        res.sendStatus(200);
+      });
+
+      const port = process.env.PORT || 3000;
+      this.app.listen(port, () => {
+        console.log(`Webhook server is listening on port ${port}`);
+      });
     } catch (error) {
       console.error("Failed to initialize bot:", error);
       process.exit(1);
     }
   }
-
   isAdmin(username) {
     return config.ADMIN_USERNAMES.includes(username);
   }
 
   async initializeCommands() {
-    // Start command
     this.bot.onText(/\/start/, (msg) => {
       const chatId = msg.chat.id;
       this.sendHelpMessage(chatId);
     });
 
-    // Subscribe command
     this.bot.onText(/\/subscribe (.+)/, async (msg, match) => {
       const chatId = msg.chat.id;
       const city = match[1];
@@ -68,7 +80,6 @@ class WeatherBot {
       }
     });
 
-    // Unsubscribe command
     this.bot.onText(/\/unsubscribe/, async (msg) => {
       const chatId = msg.chat.id;
 
@@ -100,7 +111,7 @@ class WeatherBot {
         console.error("Error unsubscribing user:", error);
       }
     });
-    // Weather command
+
     this.bot.onText(/\/weather (.+)/, async (msg, match) => {
       const chatId = msg.chat.id;
       const city = match[1];
@@ -121,7 +132,6 @@ class WeatherBot {
       }
     });
 
-    // Admin panel command
     this.bot.onText(/\/admin/, async (msg) => {
       const chatId = msg.chat.id;
       const username = msg.from.first_name + msg.from.last_name;
@@ -135,7 +145,6 @@ class WeatherBot {
       }
     });
 
-    // Admin commands
     this.bot.onText(/\/setapikey (.+)/, async (msg, match) => {
       const username = msg.from.first_name + msg.from.last_name;
       if (this.isAdmin(username)) {
@@ -192,7 +201,6 @@ class WeatherBot {
       if (this.isAdmin(username)) {
         const chatId = msg.chat.id;
         const subscribers = await Database.getActiveSubscribers();
-        console.log(subscribers);
         const userList = subscribers
           .map(
             (s) => `ID: ${s.userId}, Username: ${s.username}, City: ${s.city}`,
